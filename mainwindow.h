@@ -8,7 +8,6 @@
 class ProjectOverviewTab;
 class LexicalAnalysisTab;
 class SyntaxAnalysisTab;
-class NFASimulatorTab;
 
 class MainWindow : public QMainWindow
 {

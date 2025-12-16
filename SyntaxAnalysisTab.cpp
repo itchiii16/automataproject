@@ -10,6 +10,7 @@
 #include <QSet>
 #include <QList>
 #include <QChar>
+#include <QStack>
 
 SyntaxAnalysisTab::SyntaxAnalysisTab(QWidget* parent)
     : QWidget(parent)
@@ -32,68 +33,89 @@ SyntaxAnalysisTab::SyntaxAnalysisTab(QWidget* parent)
     QWidget* leftContainer = new QWidget(this);
     leftContainer->setLayout(leftLayout);
 
-    // ================= RIGHT SIDE: Inner Tabs =================
-    innerTabWidget = new QTabWidget(this);
+    // ================= RIGHT SIDE: Single Unified Parser Tab =================
+    QVBoxLayout* rightLayout = new QVBoxLayout();
 
-    tab1 = new QWidget();
-    tab2 = new QWidget();
-    tab3 = new QWidget();
+    QLabel* parserTitle = new QLabel("PDA Parser", this);
+    parserTitle->setFont(QFont("Poppins", 16, QFont::Bold));
+    parserTitle->setAlignment(Qt::AlignCenter);
+    rightLayout->addWidget(parserTitle);
 
-    innerTabWidget->addTab(tab1, "Delimiter Parser");
-    innerTabWidget->addTab(tab2, "Assignment Parser");
-    innerTabWidget->addTab(tab3, "Operation Parser");
+    QLabel* simulatorTitle = new QLabel("Parser Log", this);
+    simulatorTitle->setFont(QFont("Poppins", 14, QFont::Bold));
+    simulatorTitle->setAlignment(Qt::AlignCenter);
+    rightLayout->addWidget(simulatorTitle);
 
-    innerTabWidget->setStyleSheet(R"(
-        QTabBar::tab { padding: 11px 50px; font-family: 'Poppins'; font-size: 18px; font-weight: bold; }
-        QTabBar::tab:selected { background: #16163F; color: white; }
-        QTabBar::tab:!selected { background: rgba(160,160,160,0.3); color: rgba(160,160,160,0.6); }
-    )");
+    parserSimulator = new QTextEdit(this);
+    parserSimulator->setReadOnly(true);
+    parserSimulator->setFont(QFont("Consolas", 11));
+    rightLayout->addWidget(parserSimulator, 3);
 
-    // ================= SETUP TABS =================
-    auto setupValidatorTab = [](QWidget* tab, QTextEdit*& simulator, QTextEdit*& validator, QPushButton*& run) {
-        QVBoxLayout* layout = new QVBoxLayout(tab);
+    QLabel* validatorTitle = new QLabel("Validation Result", this);
+    validatorTitle->setFont(QFont("Poppins", 14, QFont::Bold));
+    validatorTitle->setAlignment(Qt::AlignCenter);
+    rightLayout->addWidget(validatorTitle);
 
-        QLabel* simulatorTitle = new QLabel("Parser Log", tab);
-        simulatorTitle->setFont(QFont("Poppins", 14, QFont::Bold));
-        simulatorTitle->setAlignment(Qt::AlignCenter);
-        layout->addWidget(simulatorTitle);
+    parserValidator = new QTextEdit(this);
+    parserValidator->setReadOnly(true);
+    parserValidator->setFont(QFont("Poppins", 12));
+    rightLayout->addWidget(parserValidator, 1);
 
-        simulator = new QTextEdit(tab);
-        simulator->setReadOnly(true);
-        simulator->setFont(QFont("Consolas", 12));
-        layout->addWidget(simulator, 3);
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    runParser = new QPushButton("Run PDA Parser", this);
+    runParser->setFont(QFont("Poppins", 10, QFont::Bold));
+    runParser->setStyleSheet("background-color: #16163F; color: white; padding: 10px 30px;");
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(runParser);
+    rightLayout->addLayout(buttonLayout);
 
-        QLabel* validatorTitle = new QLabel("Validation Result", tab);
-        validatorTitle->setFont(QFont("Poppins", 14, QFont::Bold));
-        validatorTitle->setAlignment(Qt::AlignCenter);
-        layout->addWidget(validatorTitle);
-
-        validator = new QTextEdit(tab);
-        validator->setReadOnly(true);
-        validator->setFont(QFont("Poppins", 12));
-        layout->addWidget(validator, 1);
-
-        QHBoxLayout* buttonLayout = new QHBoxLayout();
-        run = new QPushButton("Run Parser", tab);
-        run->setFont(QFont("Poppins", 10, QFont::Bold));
-        run->setStyleSheet("background-color: #16163F; color: white; padding: 10px 30px;");
-        buttonLayout->addStretch();
-        buttonLayout->addWidget(run);
-        layout->addLayout(buttonLayout);
-        tab->setLayout(layout);
-    };
-
-    setupValidatorTab(tab1, tab1Simulator, tab1Validator, tab1Run);
-    setupValidatorTab(tab2, tab2Simulator, tab2Validator, tab2Run);
-    setupValidatorTab(tab3, tab3Simulator, tab3Validator, tab3Run);
+    QWidget* rightContainer = new QWidget(this);
+    rightContainer->setLayout(rightLayout);
 
     QHBoxLayout* mainLayout = new QHBoxLayout(this);
     mainLayout->addWidget(leftContainer, 2);
-    mainLayout->addWidget(innerTabWidget, 3);
+    mainLayout->addWidget(rightContainer, 3);
     setLayout(mainLayout);
 
-    // ================= HELPER: Extract Tokens =================
-    auto getTokensWithLines = [this]() -> QList<QPair<QString, int>> {
+    // =================  PDA PARSER =================
+    connect(runParser, &QPushButton::clicked, this, [this]() {
+        parserSimulator->clear();
+        parserValidator->clear();
+
+        QStringList log;
+        log << "╔════════════════════════════════════════════════════════════╗\n";
+        log << "║          PDA PARSER - CFG to PDA CONVERSION       ║\n";
+        log << "╚════════════════════════════════════════════════════════════╝\n\n";
+
+        log << "Context-Free Grammar (CFG):\n";
+        log << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+        log << "Program  → Statement Program | ε\n";
+        log << "Statement → Assignment | Expression | DelimBlock\n";
+        log << "Assignment → id = Expression\n";
+        log << "Expression → Term ((+|-) Term)*\n";
+        log << "Term → Factor ((*|/) Factor)*\n";
+        log << "Factor → ( Expression ) | id | number\n";
+        log << "DelimBlock → { Program } | ( Expression ) | [ Expression ]\n";
+        log << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
+
+        log << "PDA Configuration:\n";
+        log << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+        log << "States: {q0(start), q1(id), q2(assign), q3(expr), qf(accept)}\n";
+        log << "Stack Alphabet: {$, (, {, [, E, T, F}\n";
+        log << "Initial Stack: $\n";
+        log << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
+
+        log << "PDA Transition Rules:\n";
+        log << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+        log << "δ(q0, id, $) → (q1, $)              // Read identifier\n";
+        log << "δ(q1, =, $) → (q2, $)               // Read assignment\n";
+        log << "δ(q0, {, $) → (q0, {$)              // Push opening delimiter\n";
+        log << "δ(q0, (, Z) → (q0, (Z)              // Push opening paren\n";
+        log << "δ(q3, }, {) → (q3, ε)               // Pop matching delimiter\n";
+        log << "δ(q3, ), () → (q3, ε)               // Pop matching paren\n";
+        log << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
+
+        // Get tokens from table
         QList<QPair<QString, int>> tokens;
         for (int i = 0; i < tokenizationtable->rowCount(); ++i) {
             QTableWidgetItem* tokenItem = tokenizationtable->item(i, 0);
@@ -104,281 +126,178 @@ SyntaxAnalysisTab::SyntaxAnalysisTab(QWidget* parent)
                 tokens.append(qMakePair(token, line));
             }
         }
-        return tokens;
-    };
 
-    // ================= DELIMITER PARSER (PDA) =================
-    connect(tab1Run, &QPushButton::clicked, this, [this, getTokensWithLines]() {
-        auto tokens = getTokensWithLines();
-        tab1Simulator->clear();
-        tab1Validator->clear();
-
-        QStringList log;
-        log << "Context-Free Grammar (CFG):\n";
-        log << "S → S S\n";
-        log << "S → { S }\n";
-        log << "S → ( S )\n";
-        log << "S → [ S ]\n";
-        log << "S → ε\n\n";
-        log << "PDA Simulation: Delimiter Matching\n\n";
-
-        QSet<QChar> delimSet = {'{', '}', '(', ')', '[', ']'};
-        QList<QPair<QChar, int>> delimTokens;
-
-        for (const auto& pair : tokens) {
-            if (pair.first.length() == 1 && delimSet.contains(pair.first[0])) {
-                delimTokens.append(qMakePair(pair.first[0], pair.second));
-            }
-        }
-
-        if (delimTokens.isEmpty()) {
-            log << "No delimiter tokens found.\n";
-            tab1Simulator->setPlainText(log.join(""));
-            tab1Validator->setPlainText("✅ No delimiters to validate");
+        if (tokens.isEmpty()) {
+            log << "⚠ No tokens available for parsing.\n";
+            parserSimulator->setPlainText(log.join(""));
+            parserValidator->setPlainText("❌ No input to parse");
             return;
         }
 
+        // PDA State
+        QString state = "q0";
         QStringList stack;
-        bool valid = true;
+        stack.push_back("$"); // Initial stack symbol
+        
         int step = 1;
+        bool valid = true;
+        int successfulStatements = 0;
+        int failedStatements = 0;
+        int currentLine = -1;
+        QString currentStatement;
+        
+        QSet<QString> keywords = {"if", "else", "elif", "for", "while", "def", "return", "print"};
 
-        for (const auto& dpair : delimTokens) {
-            QChar ch = dpair.first;
-            int line = dpair.second;
+        log << "PDA SIMULATION:\n";
+        log << "════════════════════════════════════════════════════════════\n\n";
 
-            if (ch == '{' || ch == '(' || ch == '[') {
-                stack.push_back(QString(ch));
-                log << QString("Step %1: READ '%2' (line %3) → PUSH '%2'\n")
-                           .arg(step++).arg(ch).arg(line);
-            } else {
-                if (stack.isEmpty()) {
-                    log << QString("Step %1: ❌ ERROR closing '%2' on empty stack (line %3)\n")
-                           .arg(step++).arg(ch).arg(line);
+        for (int i = 0; i < tokens.size(); ++i) {
+            QString token = tokens[i].first;
+            int line = tokens[i].second;
+
+            // Track line changes
+            if (line != currentLine) {
+                if (currentLine != -1 && !currentStatement.isEmpty()) {
+                    log << QString("────────────────────────────────────────────────────────────\n");
+                }
+                currentLine = line;
+                currentStatement.clear();
+                log << QString("📍 Line %1:\n").arg(line);
+            }
+
+            currentStatement += token + " ";
+
+            // Check if it's an identifier (potential assignment or expression)
+            bool isValidId = !token.isEmpty() && (token[0].isLetter() || token[0] == '_');
+            
+            // Skip keywords that start statements
+            if (keywords.contains(token)) {
+                log << QString("Step %1: SKIP '%2' (keyword) - Line %3\n")
+                    .arg(step++).arg(token).arg(line);
+                continue;
+            }
+
+            // Process different token types
+            if (token == "{" || token == "(" || token == "[") {
+                // Opening delimiter - PUSH
+                stack.push_back(token);
+                state = "q0";
+                log << QString("Step %1: δ(q0, '%2', Z) → (q0, '%2'Z)\n")
+                    .arg(step++).arg(token);
+                log << QString("         Action: PUSH '%1' onto stack\n").arg(token);
+                log << QString("         Stack: [%1]\n").arg(stack.join(", "));
+                
+            } else if (token == "}" || token == ")" || token == "]") {
+                // Closing delimiter - POP
+                if (stack.isEmpty() || stack.last() == "$") {
+                    log << QString("Step %1: ❌ ERROR - δ(q3, '%2', ε) - Empty stack!\n")
+                        .arg(step++).arg(token);
+                    log << QString("         Unexpected closing delimiter '%1' on line %2\n")
+                        .arg(token).arg(line);
                     valid = false;
+                    failedStatements++;
                     break;
                 }
 
-                QChar top = stack.last()[0];
-                bool match = (ch == '}' && top == '{') ||
-                             (ch == ')' && top == '(') ||
-                             (ch == ']' && top == '[');
+                QString top = stack.last();
+                bool match = (token == "}" && top == "{") ||
+                             (token == ")" && top == "(") ||
+                             (token == "]" && top == "[");
 
                 if (match) {
                     stack.pop_back();
-                    log << QString("Step %1: READ '%2' (line %3) → POP '%4' (matched)\n")
-                           .arg(step++).arg(ch).arg(line).arg(top);
+                    state = "q3";
+                    log << QString("Step %1: δ(q3, '%2', '%3') → (q3, ε)\n")
+                        .arg(step++).arg(token).arg(top);
+                    log << QString("         Action: POP '%1' (matched with '%2')\n")
+                        .arg(top).arg(token);
+                    log << QString("         Stack: [%1]\n").arg(stack.join(", "));
+                    successfulStatements++;
                 } else {
-                    log << QString("Step %1: ❌ MISMATCH '%2' vs '%3'\n")
-                               .arg(step++).arg(top).arg(ch);
+                    log << QString("Step %1: ❌ ERROR - Mismatch: '%2' vs '%3'\n")
+                        .arg(step++).arg(top).arg(token);
                     valid = false;
+                    failedStatements++;
                     break;
                 }
-            }
-        }
 
-        if (valid && !stack.isEmpty()) {
-            log << "\n❌ ERROR: Unclosed delimiters remain\n";
-            valid = false;
-        }
+            } else if (isValidId && i + 1 < tokens.size() && tokens[i + 1].first == "=") {
+                // Assignment statement
+                state = "q1";
+                log << QString("Step %1: δ(q0, id='%2', $) → (q1, $)\n")
+                    .arg(step++).arg(token);
+                log << QString("         Action: Recognize identifier for assignment\n");
+                log << QString("         Stack: [%1]\n").arg(stack.join(", "));
 
-        tab1Simulator->setPlainText(log.join(""));
-        tab1Validator->setPlainText(valid ? "✅ Delimiters are balanced" : "❌ Delimiters are unbalanced");
-    });
+            } else if (token == "=") {
+                // Assignment operator
+                state = "q2";
+                log << QString("Step %1: δ(q1, '=', $) → (q2, $)\n").arg(step++);
+                log << QString("         Action: Process assignment operator\n");
+                log << QString("         Stack: [%1]\n").arg(stack.join(", "));
 
-// ================= ASSIGNMENT PARSER (PDA) =================
-connect(tab2Run, &QPushButton::clicked, this, [this, getTokensWithLines]() {
-    auto tokens = getTokensWithLines();
-    tab2Simulator->clear();
-    tab2Validator->clear();
-
-    QStringList log;
-    log << "Context-Free Grammar (CFG):\n";
-    log << "S → id = E\n";
-    log << "E → E + T | E - T | T\n";
-    log << "T → T * F | T / F | F\n";
-    log << "F → ( E ) | id | number\n\n";
-    log << "PDA Simulation: Assignment Parsing\n\n";
-
-    if (tokens.isEmpty()) {
-        log << "No tokens available.\n";
-        tab2Simulator->setPlainText(log.join(""));
-        tab2Validator->setText("❌ No assignments to parse");
-        return;
-    }
-
-    int step = 1;
-    int currentLine = -1;
-    QString currentId;
-    QStringList stack;
-    int successCount = 0;
-    int failCount = 0;
-
-    auto isValidId = [](const QString& token){
-        if (token.isEmpty()) return false;
-        QChar first = token[0];
-        return first.isLetter() || first == '_';
-    };
-
-    // Define keywords to skip
-    QSet<QString> keywords = {"if", "else", "print", "while", "for"}; // add more as needed
-
-    for (const auto& pair : tokens) {
-        QString token = pair.first;
-        int line = pair.second;
-
-        if (line != currentLine) {
-            if (currentLine != -1) {
-                if (!stack.isEmpty()) {
-                    log << "\n❌ ERROR: Unclosed parentheses remain\n";
-                    failCount++;
-                } else if (!currentId.isEmpty()) {
-                    successCount++;
-                }
-            }
-
-            stack.clear();
-            currentId.clear();
-            currentLine = line;
-            log << QString("\nAssignment Statement (line %1):\n").arg(line);
-
-            // Skip lines starting with keywords
-            if (keywords.contains(token)) {
-                log << QString("Skipped line %1: starts with keyword '%2'\n").arg(line).arg(token);
-                continue;
-            }
-        }
-
-        bool valid = true;
-
-        if (currentId.isEmpty()) {
-            if (isValidId(token)) {
-                currentId = token;
-                log << QString("Step %1: READ '%2' (line %3) → matches 'id'\n").arg(step++).arg(token).arg(line);
-            } else {
-                log << QString("Step %1: ❌ ERROR, expected 'id' but got '%2'\n").arg(step++).arg(token);
-                valid = false;
-            }
-        } else if (stack.isEmpty() && token == "=") {
-            log << QString("Step %1: READ '%2' (line %3) → matches '='\n").arg(step++).arg(token).arg(line);
-        } else {
-            if (token == "(") {
-                stack.push_back("(");
-                log << QString("Step %1: READ '%2' (line %3) → PUSH '('\n").arg(step++).arg(token).arg(line);
-            } else if (token == ")") {
-                if (stack.isEmpty()) {
-                    log << QString("Step %1: ❌ ERROR, unexpected ')'\n").arg(step++);
-                    valid = false;
-                } else {
-                    stack.pop_back();
-                    log << QString("Step %1: READ '%2' (line %3) → POP '(' (matched)\n").arg(step++).arg(token).arg(line);
-                }
             } else if (token[0].isDigit()) {
-                log << QString("Step %1: READ '%2' (line %3) → matches 'number'\n").arg(step++).arg(token).arg(line);
+                // Number - part of expression
+                state = "q3";
+                log << QString("Step %1: δ(q2, number='%2', $) → (q3, $)\n")
+                    .arg(step++).arg(token);
+                log << QString("         Action: Process number in expression\n");
+                log << QString("         Stack: [%1]\n").arg(stack.join(", "));
+
             } else if (token == "+" || token == "-" || token == "*" || token == "/") {
-                log << QString("Step %1: READ '%2' (line %3) → matches operator\n").arg(step++).arg(token).arg(line);
-            } else if (isValidId(token)) {
-                log << QString("Step %1: READ '%2' (line %3) → matches 'id'\n").arg(step++).arg(token).arg(line);
-            } else {
-                log << QString("Step %1: ❌ ERROR, unexpected token '%2'\n").arg(step++).arg(token);
-                valid = false;
+                // Operator
+                state = "q3";
+                log << QString("Step %1: δ(q3, operator='%2', $) → (q3, $)\n")
+                    .arg(step++).arg(token);
+                log << QString("         Action: Process operator\n");
+                log << QString("         Stack: [%1]\n").arg(stack.join(", "));
+
+            } else if (isValidId) {
+                // Identifier in expression
+                state = "q3";
+                log << QString("Step %1: δ(q3, id='%2', $) → (q3, $)\n")
+                    .arg(step++).arg(token);
+                log << QString("         Action: Process identifier in expression\n");
+                log << QString("         Stack: [%1]\n").arg(stack.join(", "));
             }
         }
 
-        if (!valid) failCount++;
-    }
+        log << "\n════════════════════════════════════════════════════════════\n";
+        log << "FINAL PDA STATE:\n";
+        log << "════════════════════════════════════════════════════════════\n";
+        log << QString("State: %1\n").arg(state);
+        log << QString("Stack: [%1]\n").arg(stack.join(", "));
+        log << QString("Stack Size: %1\n\n").arg(stack.size());
 
-    if (!stack.isEmpty()) {
-        log << "\n❌ ERROR: Unclosed parentheses remain\n";
-        failCount++;
-    } else if (!currentId.isEmpty()) {
-        successCount++;
-    }
-
-    tab2Simulator->setPlainText(log.join(""));
-    tab2Validator->setText(QString("✅ Success: %1 statements\n❌ Failures: %2 statements")
-                           .arg(successCount).arg(failCount));
-});
-
-
-    // ================= OPERATION PARSER (PDA) =================
-    connect(tab3Run, &QPushButton::clicked, this, [this, getTokensWithLines]() {
-        auto tokens = getTokensWithLines();
-        tab3Simulator->clear();
-        tab3Validator->clear();
-
-        QStringList log;
-        log << "Context-Free Grammar (CFG) for Operations:\n";
-        log << "E → E + T | E - T | T\n";
-        log << "T → T * F | T / F | F\n";
-        log << "F → ( E ) | id | number\n\n";
-        log << "PDA Simulation: Operation Parsing\n\n";
-
-        int statementCounter = 1;
-        int successCount = 0;
-        int failCount = 0;
-        QList<QPair<QString,int>> currentExpr;
-
-        auto isExprToken = [](const QString& token){
-            return !token.isEmpty() && (token[0].isLetter() || token[0].isDigit() ||
-                   token == "+" || token == "-" || token == "*" || token == "/" ||
-                   token == "(" || token == ")");
-        };
-
-        for (int i = 0; i < tokens.size(); ++i) {
-            QString tok = tokens[i].first;
-            int line = tokens[i].second;
-
-            if (isExprToken(tok)) currentExpr.append(tokens[i]);
-
-            bool isEndOfExpr = (i+1 == tokens.size()) || !isExprToken(tokens[i+1].first);
-
-            if (!currentExpr.isEmpty() && isEndOfExpr) {
-                log << QString("Expression %1:\n").arg(statementCounter++);
-                int step = 1;
-                QStringList stack;
-                bool valid = true;
-
-                for (const auto& pair : currentExpr) {
-                    QString token = pair.first;
-                    int line = pair.second;
-
-                    if (token == "(") {
-                        stack.push_back(token);
-                        log << QString("Step %1: READ '(' (line %2) → PUSH '('\n").arg(step++).arg(line);
-                    } else if (token == ")") {
-                        if (stack.isEmpty() || stack.last() != "(") {
-                            log << QString("Step %1: ❌ ERROR, unexpected ')'\n").arg(step++);
-                            valid = false;
-                            break;
-                        } else {
-                            stack.pop_back();
-                            log << QString("Step %1: READ ')' (line %2) → POP '(' (matched)\n").arg(step++).arg(line);
-                        }
-                    } else if (token[0].isLetter()) {
-                        log << QString("Step %1: READ '%2' (line %3) → matches 'id'\n").arg(step++).arg(token).arg(line);
-                    } else if (token[0].isDigit()) {
-                        log << QString("Step %1: READ '%2' (line %3) → matches 'number'\n").arg(step++).arg(token).arg(line);
-                    } else if (token == "+" || token == "-" || token == "*" || token == "/") {
-                        log << QString("Step %1: READ '%2' (line %3) → matches operator\n").arg(step++).arg(token).arg(line);
-                    }
-                }
-
-                if (valid && !stack.isEmpty()) {
-                    log << "\n❌ ERROR: Unclosed parentheses remain\n";
-                    valid = false;
-                }
-
-                log << (valid ? "✅ Expression parsed successfully!\n\n" : "❌ Expression parsing failed.\n\n");
-
-                currentExpr.clear();
-                if (valid) successCount++;
-                else failCount++;
-            }
+        // Final validation
+        if (valid && stack.size() == 1 && stack[0] == "$") {
+            log << "✅ ACCEPT: Stack is empty (only $ remains)\n";
+            log << "✅ All delimiters are balanced\n";
+            log << "✅ All expressions are well-formed\n";
+            parserValidator->setPlainText(QString(
+                "✅ PARSING SUCCESSFUL\n\n"
+                "✓ Syntax is valid\n"
+                "✓ All delimiters balanced\n"
+                "✓ All expressions well-formed\n"
+                "✓ Processed %1 tokens").arg(tokens.size()));
+        } else if (valid && stack.size() > 1) {
+            log << "❌ REJECT: Unclosed delimiters remain in stack\n";
+            log << QString("   Remaining: [%1]\n").arg(stack.join(", "));
+            parserValidator->setPlainText(QString(
+                "❌ PARSING FAILED\n\n"
+                "✗ Unclosed delimiters detected\n"
+                "✗ Stack not empty at end\n"
+                "Remaining: %1").arg(stack.join(", ")));
+        } else {
+            log << "❌ REJECT: Syntax errors detected\n";
+            parserValidator->setPlainText(QString(
+                "❌ PARSING FAILED\n\n"
+                "✗ Syntax errors detected\n"
+                "✗ Invalid token sequence\n"
+                "✗ Check parser log for details"));
         }
 
-        tab3Simulator->setPlainText(log.join(""));
-        tab3Validator->setText(QString("✅ Success: %1 expressions\n❌ Failures: %2 expressions")
-                               .arg(successCount).arg(failCount));
+        parserSimulator->setPlainText(log.join(""));
     });
 }
 

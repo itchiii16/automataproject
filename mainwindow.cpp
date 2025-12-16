@@ -3,6 +3,7 @@
 #include "LexicalAnalysis.h"
 #include "SyntaxAnalysisTab.h"
 
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
