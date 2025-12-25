@@ -59,8 +59,8 @@ Ensure your development environment meets the following requirements:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/itchiii16/automataproject.git
-   cd Compiler-Frontend-Simulator-LEXSYN-Lexical-Syntax-Analysis
+   git clone https://github.com/itchiii16/CppCompilerFrontend.git
+   cd CppCompilerFrontend
    ```
 2. **Build with CMake (Recommended)**
    ```bash
